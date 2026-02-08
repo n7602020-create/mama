@@ -1,0 +1,252 @@
+
+import React, { useState, useEffect } from 'react';
+import { ChatTopic, ChatMessage } from '../types';
+import { MessageSquarePlus, Send, MessageCircle, Lock, ChevronLeft, Plus, UserPlus } from 'lucide-react';
+import { getChatUsers, saveChatUsers, ChatUser } from '../services/storage';
+
+interface ChatSystemProps {
+  topics: ChatTopic[];
+  onUpdateTopics: (topics: ChatTopic[]) => void;
+}
+
+const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
+  const [view, setView] = useState<'login' | 'register'>('login');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userName, setUserName] = useState('');
+  const [userPass, setUserPass] = useState('');
+  const [activeTopic, setActiveTopic] = useState<ChatTopic | null>(null);
+  const [newTopicTitle, setNewTopicTitle] = useState('');
+  const [newMessageText, setNewMessageText] = useState('');
+  const [showNewTopicModal, setShowNewTopicModal] = useState(false);
+  const [users, setUsers] = useState<ChatUser[]>([]);
+
+  useEffect(() => {
+    setUsers(getChatUsers());
+  }, []);
+
+  const handleRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userName || !userPass) return;
+    if (users.find(u => u.name === userName)) {
+      alert("שם משתמש תפוס");
+      return;
+    }
+    const newList = [...users, { name: userName, pass: userPass }];
+    setUsers(newList);
+    saveChatUsers(newList);
+    alert("נרשמת בהצלחה! כעת ניתן להתחבר.");
+    setView('login');
+  };
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const user = users.find(u => u.name === userName && u.pass === userPass);
+    if (user) {
+      setIsLoggedIn(true);
+    } else {
+      alert("שם משתמש או סיסמה שגויים. (יש להירשם במידה ולא נרשמת בעבר)");
+    }
+  };
+
+  const createTopic = () => {
+    if (!newTopicTitle) return;
+    const topic: ChatTopic = {
+      id: Date.now().toString(),
+      title: newTopicTitle,
+      author: userName,
+      timestamp: Date.now(),
+      messages: []
+    };
+    onUpdateTopics([topic, ...topics]);
+    setNewTopicTitle('');
+    setShowNewTopicModal(false);
+  };
+
+  const addMessage = () => {
+    if (!newMessageText || !activeTopic) return;
+    const msg: ChatMessage = {
+      id: Date.now().toString(),
+      author: userName,
+      text: newMessageText,
+      timestamp: Date.now()
+    };
+    const updated = topics.map(t => 
+      t.id === activeTopic.id ? { ...t, messages: [...t.messages, msg] } : t
+    );
+    onUpdateTopics(updated);
+    setActiveTopic({ ...activeTopic, messages: [...activeTopic.messages, msg] });
+    setNewMessageText('');
+  };
+
+  if (!isLoggedIn) {
+    return (
+      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl p-12 text-center max-w-xl mx-auto space-y-8 animate-in zoom-in duration-500">
+        <div className="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+          <MessageCircle className="w-10 h-10" />
+        </div>
+        <div>
+          <h3 className="text-3xl font-black text-slate-900 tracking-tighter">צ'אט הקהילה</h3>
+          <p className="text-slate-400 font-bold mt-2">הכניסה לצ'אט מותרת לנרשמים בלבד</p>
+        </div>
+        
+        {view === 'login' ? (
+          <form onSubmit={handleLogin} className="space-y-4">
+            <input 
+              className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-center text-sm"
+              placeholder="שם משתמש"
+              value={userName}
+              onChange={e => setUserName(e.target.value)}
+            />
+            <input 
+              type="password"
+              className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-center text-sm"
+              placeholder="סיסמה"
+              value={userPass}
+              onChange={e => setUserPass(e.target.value)}
+            />
+            <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
+              <Lock className="w-5 h-5" />
+              התחבר לצ'אט
+            </button>
+            <button type="button" onClick={() => setView('register')} className="text-indigo-600 font-bold text-xs hover:underline">אין לך משתמש? הירשם כאן</button>
+          </form>
+        ) : (
+          <form onSubmit={handleRegister} className="space-y-4">
+            <input 
+              className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-center text-sm"
+              placeholder="שם משתמש חדש"
+              value={userName}
+              onChange={e => setUserName(e.target.value)}
+            />
+            <input 
+              type="password"
+              className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-center text-sm"
+              placeholder="בחר סיסמה"
+              value={userPass}
+              onChange={e => setUserPass(e.target.value)}
+            />
+            <button type="submit" className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2">
+              <UserPlus className="w-5 h-5" />
+              בצע הרשמה
+            </button>
+            <button type="button" onClick={() => setView('login')} className="text-slate-500 font-bold text-xs hover:underline">כבר רשום? התחבר עכשיו</button>
+          </form>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl overflow-hidden min-h-[600px] flex flex-col md:flex-row animate-in fade-in duration-500">
+      {/* Sidebar: Topics List */}
+      <div className="w-full md:w-80 border-l border-slate-100 bg-slate-50/50 flex flex-col">
+        <div className="p-6 border-b border-slate-100 bg-white flex justify-between items-center">
+          <h3 className="font-black text-lg text-slate-900">נושאי שיחה</h3>
+          <button onClick={() => setShowNewTopicModal(true)} className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all">
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="flex-grow overflow-y-auto">
+          {topics.length === 0 ? (
+            <div className="p-12 text-center text-slate-300 font-bold">אין נושאים פתוחים</div>
+          ) : (
+            topics.map(topic => (
+              <button 
+                key={topic.id}
+                onClick={() => setActiveTopic(topic)}
+                className={`w-full p-6 text-right border-b border-slate-100 transition-all hover:bg-white flex flex-col gap-1 ${activeTopic?.id === topic.id ? 'bg-white border-r-4 border-r-indigo-600 shadow-sm' : ''}`}
+              >
+                <span className="font-black text-slate-800 text-sm line-clamp-1">{topic.title}</span>
+                <span className="text-[10px] text-slate-400 font-bold">{topic.author} | {topic.messages.length} תגובות</span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Main: Message Thread */}
+      <div className="flex-grow flex flex-col bg-white">
+        {activeTopic ? (
+          <>
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h4 className="font-black text-xl text-slate-900 tracking-tight">{activeTopic.title}</h4>
+                <p className="text-[10px] text-slate-400 font-bold">נוצר על ידי {activeTopic.author}</p>
+              </div>
+              <button onClick={() => setActiveTopic(null)} className="md:hidden p-2 text-slate-400 hover:text-slate-600">
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-grow p-8 overflow-y-auto space-y-6">
+              {activeTopic.messages.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4">
+                  <MessageCircle className="w-12 h-12 opacity-20" />
+                  <p className="font-bold">היו הראשונים להגיב בנושא זה</p>
+                </div>
+              ) : (
+                activeTopic.messages.map(msg => (
+                  <div key={msg.id} className={`flex flex-col max-w-[80%] ${msg.author === userName ? 'mr-auto' : 'ml-auto'}`}>
+                    <div className={`p-4 rounded-3xl shadow-sm text-sm font-bold ${msg.author === userName ? 'bg-indigo-600 text-white rounded-bl-none' : 'bg-slate-100 text-slate-700 rounded-br-none'}`}>
+                      {msg.text}
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-bold mt-1 px-2">{msg.author}</span>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="p-6 border-t border-slate-100 bg-slate-50/30 flex gap-4">
+              <input 
+                className="flex-grow bg-white border border-slate-200 rounded-2xl px-6 py-4 outline-none font-bold text-sm"
+                placeholder="כתבו תגובה..."
+                value={newMessageText}
+                onChange={e => setNewMessageText(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addMessage()}
+              />
+              <button 
+                onClick={addMessage}
+                className="p-4 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all"
+              >
+                <Send className="w-5 h-5" />
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="flex-grow flex flex-col items-center justify-center p-20 text-center gap-6">
+             <div className="bg-indigo-50 p-6 rounded-full text-indigo-300">
+                <MessageSquarePlus className="w-12 h-12" />
+             </div>
+             <div>
+                <h4 className="text-2xl font-black text-slate-800 tracking-tighter">ברוכים הבאים לצ'אט</h4>
+                <p className="text-slate-400 font-bold mt-2 max-w-sm mx-auto">בחרו נושא מהרשימה בצד כדי להתחיל לקרוא ולהגיב, או פתחו נושא חדש בעצמכם.</p>
+             </div>
+             <button onClick={() => setShowNewTopicModal(true)} className="px-10 py-4 bg-indigo-600 text-white rounded-[2rem] font-black shadow-xl shadow-indigo-100 hover:scale-105 transition-all">
+                פתח נושא חדש לשיחה
+             </button>
+          </div>
+        )}
+      </div>
+
+      {/* New Topic Modal */}
+      {showNewTopicModal && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 space-y-6">
+            <h3 className="text-2xl font-black text-slate-900">פתיחת נושא חדש</h3>
+            <input 
+              autoFocus
+              className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm"
+              placeholder="מה הנושא שתרצו להעלות?"
+              value={newTopicTitle}
+              onChange={e => setNewTopicTitle(e.target.value)}
+            />
+            <div className="flex gap-4">
+               <button onClick={createTopic} className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all text-sm">צור נושא</button>
+               <button onClick={() => setShowNewTopicModal(false)} className="px-8 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all text-sm">ביטול</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ChatSystem;
