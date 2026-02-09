@@ -9,7 +9,7 @@ interface AdModalProps {
 }
 
 const AdModal: React.FC<AdModalProps> = ({ ads, onClose }) => {
-  if (ads.length === 0) return null;
+  if (!ads || ads.length === 0) return null;
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
@@ -24,7 +24,7 @@ const AdModal: React.FC<AdModalProps> = ({ ads, onClose }) => {
         <div className="max-h-[85vh] overflow-y-auto p-8 space-y-8">
           <div className="text-center space-y-2">
             <h2 className="text-2xl font-black text-slate-900">הודעות ופרסומות הקהילה</h2>
-            <p className="text-sm text-slate-400 font-bold uppercase tracking-wider">Community Announcements</p>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Community Announcements</p>
           </div>
 
           <div className="grid grid-cols-1 gap-6">
@@ -54,7 +54,7 @@ const AdModal: React.FC<AdModalProps> = ({ ads, onClose }) => {
               className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-black text-lg shadow-xl shadow-indigo-100 hover:bg-indigo-700 hover:scale-105 transition-all flex items-center gap-2"
             >
               <CheckCircle2 className="w-5 h-5" />
-              הבנתי, תודה!
+              סגור מודעה
             </button>
           </div>
         </div>

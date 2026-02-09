@@ -6,23 +6,28 @@ export interface ChatUser {
   pass: string;
 }
 
-// מפתח ענן ייחודי וחדש לחלוטין לסנכרון יציב
-const BUCKET_ID = 'ruhi_final_v3_secure_sync_2025';
+// מזהה ייחודי למניעת התנגשויות
+const BUCKET_ID = 'ruhi_final_stable_sync_v5';
 const BASE_URL = `https://kvdb.io/A4rY3qN6u1e5u7y9s9z2r/${BUCKET_ID}`;
 
-// פונקציות עזר לתקשורת עם הענן - עם ביטול Caching
+// פונקציה שמבטיחה שהמידע תמיד טרי מהענן
 async function remoteGet<T>(key: string, defaultValue: T): Promise<T> {
   try {
-    const response = await fetch(`${BASE_URL}_${key}`, { 
+    // הוספת timestamp כדי למנוע מהדפדפן לשמור גרסה ישנה של המידע
+    const cacheBuster = `?t=${Date.now()}`;
+    const response = await fetch(`${BASE_URL}_${key}${cacheBuster}`, { 
       method: 'GET',
-      cache: 'no-store', // מבטיח שהדפדפן לא יציג נתונים ישנים
-      headers: { 'Cache-Control': 'no-cache' }
+      headers: { 
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
     });
     if (!response.ok) return defaultValue;
     const text = await response.text();
     return text ? JSON.parse(text) : defaultValue;
   } catch (e) {
-    console.error(`Error fetching ${key} from cloud:`, e);
+    console.error(`Error fetching ${key}:`, e);
     return defaultValue;
   }
 }
@@ -34,18 +39,22 @@ async function remoteSave<T>(key: string, data: T): Promise<void> {
       body: JSON.stringify(data),
       headers: { 'Content-Type': 'application/json' }
     });
-    // שמירה מקומית לגיבוי מהיר
-    localStorage.setItem(`${BUCKET_ID}_${key}`, JSON.stringify(data));
   } catch (e) {
-    console.error(`Error saving ${key} to cloud:`, e);
+    console.error(`Error saving ${key}:`, e);
   }
 }
 
 export const getEvents = async (): Promise<CareEvent[]> => remoteGet<CareEvent[]>('events', []);
-export const saveEvents = async (events: CareEvent[]) => remoteSave('events', events);
+
+export const saveEvents = async (newEvents: CareEvent[]) => {
+  await remoteSave('events', newEvents);
+};
 
 export const getChatTopics = async (): Promise<ChatTopic[]> => remoteGet<ChatTopic[]>('chat', []);
-export const saveChatTopics = async (topics: ChatTopic[]) => remoteSave('chat', topics);
+
+export const saveChatTopics = async (updatedTopics: ChatTopic[]) => {
+  await remoteSave('chat', updatedTopics);
+};
 
 export const getSettings = async (): Promise<AppSettings> => {
   const defaultSettings: AppSettings = {
@@ -53,7 +62,7 @@ export const getSettings = async (): Promise<AppSettings> => {
     coordinatorPhone: "052-7626549",
     safetyNote: "חשוב מאד ביציאה לשים לב שהלחצן מצוקה בהשג ידה!",
     systemNote: "העדכון בטבלה חשוב ביותר כדי למנוע עומסים ואי נעימויות מצד אחד, וחוסר מבקרים מהצד השני.",
-    fridayMessage: "לאחר משמרת הבוקר - זמן התארגנות לשבת.",
+    fridayMessage: "זמן התארגנות לשבת.",
     saturdayMessage: "שבת שלום! אין ביקורים ביום זה.",
     slots: [
       { id: 's1', label: 'בוקר', startTime: '09:00', endTime: '14:00', type: EventType.Escort },
@@ -71,11 +80,11 @@ export const getSettings = async (): Promise<AppSettings> => {
       { id: 'notes', label: 'הערות', isRequired: false, isPublic: false, type: 'textarea' },
     ],
     notices: [
-      { id: 'n1', text: "מלווה יחיד אחראי/ת להיות לצד רוחי ולדאוג לכל צרכיה ולהיות בשטח עם המבקרים שיגיעו.", type: 'escort' },
-      { id: 'n2', text: "חשוב מאד ביציאה לשים לב שהלחצן מצוקה בהשג ידה!", type: 'safety' }
+      { id: 'n1', text: "מלווה יחיד אחראי להיות לצד רוחי.", type: 'escort' },
+      { id: 'n2', text: "שימו לב ללחצן מצוקה!", type: 'safety' }
     ],
     ads: [
-      { id: 'a1', title: "תודה לתומכים", description: "כאן ניתן לפרסם הודעות תודה או פרסומות של הקהילה.", link: "#" }
+      { id: 'a1', title: "ברוכים הבאים", description: "תודה לכל הקהילה על העזרה.", link: "#" }
     ]
   };
   return remoteGet<AppSettings>('settings', defaultSettings);
@@ -84,10 +93,10 @@ export const getSettings = async (): Promise<AppSettings> => {
 export const saveSettings = async (settings: AppSettings) => remoteSave('settings', settings);
 
 export const getChatUsers = (): ChatUser[] => {
-  const data = localStorage.getItem('ruhi_chat_users_v1');
+  const data = localStorage.getItem('ruhi_chat_users_v5');
   return data ? JSON.parse(data) : [];
 };
 
 export const saveChatUsers = (users: ChatUser[]) => {
-  localStorage.setItem('ruhi_chat_users_v1', JSON.stringify(users));
+  localStorage.setItem('ruhi_chat_users_v5', JSON.stringify(users));
 };
