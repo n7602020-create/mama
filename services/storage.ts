@@ -1,59 +1,59 @@
 
 import { CareEvent, AppSettings, EventType, ChatTopic } from '../types';
 
-// Fix: Define and export ChatUser interface to satisfy imports in components/ChatSystem.tsx
+// Fix: Add and export ChatUser interface so it can be used in ChatSystem components
 export interface ChatUser {
   name: string;
   pass: string;
 }
 
-// Using an anonymous KV store for true cross-device sync without complex auth for this demo
-// In a production app on Vercel, you'd use @vercel/kv with environment variables.
-const BUCKET_URL = 'https://kvdb.io/A6j5n5q6H6Q9n5p6A6j5n5'; // Generic persistent bucket for Ruhi app
-const EVENTS_KEY = 'events';
-const SETTINGS_KEY = 'settings';
-const CHAT_KEY = 'chat';
-const USERS_KEY = 'users';
+// מפתח ייחודי לאפליקציה של רוחי כדי שלא יתערבב עם נתונים אחרים
+const BUCKET_ID = 'ruhi_care_v2_global_sync';
+const BASE_URL = `https://kvdb.io/A4rY3qN6u1e5u7y9s9z2r/${BUCKET_ID}`;
 
-// Fallback to local storage if cloud is unavailable
-const getLocal = (key: string) => {
-  const d = localStorage.getItem(`ruhi_${key}`);
-  return d ? JSON.parse(d) : null;
-};
-
-const saveLocal = (key: string, data: any) => {
-  localStorage.setItem(`ruhi_${key}`, JSON.stringify(data));
-};
-
-export const fetchCloudData = async (key: string, fallback: any) => {
+// פונקציות עזר לתקשורת עם הענן
+async function remoteGet<T>(key: string, defaultValue: T): Promise<T> {
   try {
-    const response = await fetch(`${BUCKET_URL}/${key}`);
-    if (!response.ok) throw new Error('Cloud fetch failed');
-    const data = await response.json();
-    saveLocal(key, data); // Keep local cache updated
-    return data;
+    const response = await fetch(`${BASE_URL}_${key}`);
+    if (!response.ok) return defaultValue;
+    const text = await response.text();
+    return text ? JSON.parse(text) : defaultValue;
   } catch (e) {
-    console.warn(`Sync failed for ${key}, using local cache.`);
-    return getLocal(key) || fallback;
+    console.error(`Error fetching ${key} from cloud:`, e);
+    return defaultValue;
   }
-};
+}
 
-export const saveCloudData = async (key: string, data: any) => {
-  saveLocal(key, data); // Update local first for snappy UI
+async function remoteSave<T>(key: string, data: T): Promise<void> {
   try {
-    await fetch(`${BUCKET_URL}/${key}`, {
+    await fetch(`${BASE_URL}_${key}`, {
       method: 'POST',
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
+    // עדכון מקביל ב-LocalStorage לגיבוי ומהירות
+    localStorage.setItem(`${BUCKET_ID}_${key}`, JSON.stringify(data));
   } catch (e) {
-    console.error(`Failed to push ${key} to cloud.`);
+    console.error(`Error saving ${key} to cloud:`, e);
   }
+}
+
+export const getEvents = async (): Promise<CareEvent[]> => {
+  return remoteGet<CareEvent[]>('events', []);
 };
 
-export const getEvents = () => fetchCloudData(EVENTS_KEY, []);
-export const saveEvents = (events: CareEvent[]) => saveCloudData(EVENTS_KEY, events);
+export const saveEvents = async (events: CareEvent[]) => {
+  await remoteSave('events', events);
+};
 
-export const getSettings = (): Promise<AppSettings> => {
+export const getChatTopics = async (): Promise<ChatTopic[]> => {
+  return remoteGet<ChatTopic[]>('chat', []);
+};
+
+export const saveChatTopics = async (topics: ChatTopic[]) => {
+  await remoteSave('chat', topics);
+};
+
+export const getSettings = async (): Promise<AppSettings> => {
   const defaultSettings: AppSettings = {
     coordinatorName: "פדר רבקי",
     coordinatorPhone: "052-7626549",
@@ -84,13 +84,18 @@ export const getSettings = (): Promise<AppSettings> => {
       { id: 'a1', title: "תודה לתומכים", description: "כאן ניתן לפרסם הודעות תודה או פרסומות של הקהילה.", link: "#" }
     ]
   };
-  return fetchCloudData(SETTINGS_KEY, defaultSettings);
+  return remoteGet<AppSettings>('settings', defaultSettings);
 };
-export const saveSettings = (settings: AppSettings) => saveCloudData(SETTINGS_KEY, settings);
 
-export const getChatTopics = () => fetchCloudData(CHAT_KEY, []);
-export const saveChatTopics = (topics: ChatTopic[]) => saveCloudData(CHAT_KEY, topics);
+export const saveSettings = async (settings: AppSettings) => {
+  await remoteSave('settings', settings);
+};
 
-// Fix: Added explicit return types using the ChatUser interface
-export const getChatUsers = (): Promise<ChatUser[]> => fetchCloudData(USERS_KEY, []);
-export const saveChatUsers = (users: ChatUser[]) => saveCloudData(USERS_KEY, users);
+export const getChatUsers = (): ChatUser[] => {
+  const data = localStorage.getItem('ruhi_chat_users_v1');
+  return data ? JSON.parse(data) : [];
+};
+
+export const saveChatUsers = (users: ChatUser[]) => {
+  localStorage.setItem('ruhi_chat_users_v1', JSON.stringify(users));
+};

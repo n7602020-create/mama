@@ -40,7 +40,7 @@ const AdModal: React.FC<AdModalProps> = ({ ads, onClose }) => {
                   <p className="text-xs text-slate-600 font-medium leading-relaxed">{ad.description}</p>
                   {ad.link && ad.link !== '#' && (
                     <a href={ad.link} target="_blank" rel="noopener noreferrer" className="text-xs font-black text-indigo-600 hover:underline mt-2">
-                      לפרטים נוספים &gt;&gt;
+                      לפרטים נוספים >>
                     </a>
                   )}
                 </div>

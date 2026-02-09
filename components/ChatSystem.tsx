@@ -23,62 +23,47 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
   
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Initial users load
   useEffect(() => {
-    const loadUsers = async () => {
-      const u = await getChatUsers();
-      setUsers(u);
-    };
-    loadUsers();
-    
-    // Polling faster for chat (every 3 seconds)
-    const syncInterval = setInterval(() => {
-      refreshTopics();
-    }, 3000);
-
-    return () => clearInterval(syncInterval);
+    setUsers(getChatUsers());
   }, []);
 
-  // Auto-scroll to bottom of chat
+  // עדכון הנושא הפעיל כשהנתונים הגלובליים משתנים
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [activeTopic?.messages]);
-
-  const refreshTopics = async () => {
-    setIsSyncing(true);
-    const updated = await getChatTopics();
-    onUpdateTopics(updated);
-    
     if (activeTopic) {
-      const refreshedActive = updated.find(t => t.id === activeTopic.id);
-      if (refreshedActive && JSON.stringify(refreshedActive.messages) !== JSON.stringify(activeTopic.messages)) {
-        setActiveTopic(refreshedActive);
+      const current = topics.find(t => t.id === activeTopic.id);
+      if (current && JSON.stringify(current.messages) !== JSON.stringify(activeTopic.messages)) {
+        setActiveTopic(current);
       }
     }
-    setTimeout(() => setIsSyncing(false), 500);
-  };
+  }, [topics, activeTopic]);
 
-  const handleRegister = async (e: React.FormEvent) => {
+  // גלילה אוטומטית לסוף
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  }, [activeTopic?.messages.length]);
+
+  const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     if (!userName || !userPass) return;
-    const currentUsers = await getChatUsers();
-    if (currentUsers.find((u: any) => u.name === userName)) {
-      alert("שם משתמש תפוס");
+    if (users.find(u => u.name === userName)) {
+      alert("שם המשתמש כבר קיים");
       return;
     }
-    const newList = [...currentUsers, { name: userName, pass: userPass }];
+    const newList = [...users, { name: userName, pass: userPass }];
     setUsers(newList);
-    await saveChatUsers(newList);
+    saveChatUsers(newList);
     alert("נרשמת בהצלחה! כעת ניתן להתחבר.");
     setView('login');
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const currentUsers = await getChatUsers();
-    const user = currentUsers.find((u: any) => u.name === userName && u.pass === userPass);
+    const user = users.find(u => u.name === userName && u.pass === userPass);
     if (user) {
       setIsLoggedIn(true);
     } else {
@@ -95,8 +80,7 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
       timestamp: Date.now(),
       messages: []
     };
-    const currentTopics = await getChatTopics();
-    const newTopics = [topic, ...currentTopics];
+    const newTopics = [topic, ...topics];
     await saveChatTopics(newTopics);
     onUpdateTopics(newTopics);
     setNewTopicTitle('');
@@ -105,7 +89,8 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
   };
 
   const addMessage = async () => {
-    if (!newMessageText || !activeTopic) return;
+    if (!newMessageText.trim() || !activeTopic) return;
+    
     const msg: ChatMessage = {
       id: Date.now().toString(),
       author: userName,
@@ -113,15 +98,17 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
       timestamp: Date.now()
     };
     
-    const allTopics = await getChatTopics();
-    const updated = allTopics.map((t: any) => 
-      t.id === activeTopic.id ? { ...t, messages: [...t.messages, msg] } : t
+    // עדכון אופטימי
+    const updatedTopic = { ...activeTopic, messages: [...activeTopic.messages, msg] };
+    setActiveTopic(updatedTopic);
+    setNewMessageText('');
+
+    const allTopics = topics.map(t => 
+      t.id === activeTopic.id ? updatedTopic : t
     );
     
-    await saveChatTopics(updated);
-    onUpdateTopics(updated);
-    setActiveTopic(prev => prev ? { ...prev, messages: [...prev.messages, msg] } : null);
-    setNewMessageText('');
+    await saveChatTopics(allTopics);
+    onUpdateTopics(allTopics);
   };
 
   const formatTime = (ts: number) => {
@@ -136,7 +123,7 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
         </div>
         <div>
           <h3 className="text-3xl font-black text-slate-900 tracking-tighter">צ'אט הקהילה</h3>
-          <p className="text-slate-400 font-bold mt-2">הכניסה לצ'אט מותרת לנרשמים בלבד</p>
+          <p className="text-slate-400 font-bold mt-2">הכניסה לצ'אט מאובטחת ומסונכרנת בין כולם</p>
         </div>
         
         {view === 'login' ? (
@@ -158,7 +145,7 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
               <Lock className="w-5 h-5" />
               התחבר לצ'אט
             </button>
-            <button type="button" onClick={() => setView('register')} className="text-indigo-600 font-bold text-xs hover:underline">אין לך משתמש? הירשם כאן</button>
+            <button type="button" onClick={() => setView('register')} className="text-indigo-600 font-bold text-xs hover:underline">משתמש חדש? הירשם כאן</button>
           </form>
         ) : (
           <form onSubmit={handleRegister} className="space-y-4">
@@ -179,7 +166,7 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
               <UserPlus className="w-5 h-5" />
               בצע הרשמה
             </button>
-            <button type="button" onClick={() => setView('login')} className="text-slate-500 font-bold text-xs hover:underline">כבר רשום? התחבר עכשיו</button>
+            <button type="button" onClick={() => setView('login')} className="text-slate-500 font-bold text-xs hover:underline">חזור להתחברות</button>
           </form>
         )}
       </div>
@@ -189,119 +176,113 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
   return (
     <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl overflow-hidden min-h-[600px] flex flex-col md:flex-row animate-in fade-in duration-500 relative">
       
-      {/* Sync Badge */}
-      <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2 py-1 bg-white/80 backdrop-blur rounded-full border border-slate-100 shadow-sm pointer-events-none">
-        <div className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-amber-400 animate-pulse' : 'bg-emerald-500'}`}></div>
-        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
-          {isSyncing ? <RefreshCw className="w-2 h-2 animate-spin" /> : <Wifi className="w-2 h-2" />}
-          Live Sync
-        </span>
-      </div>
-
-      {/* Sidebar: Topics List */}
-      <div className="w-full md:w-80 border-l border-slate-100 bg-slate-50/50 flex flex-col">
-        <div className="p-6 border-b border-slate-100 bg-white flex justify-between items-center">
-          <h3 className="font-black text-lg text-slate-900">נושאי שיחה</h3>
-          <button onClick={() => setShowNewTopicModal(true)} className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all">
-            <Plus className="w-4 h-4" />
+      {/* Sidebar */}
+      <div className="w-full md:w-80 border-l border-slate-100 bg-slate-50/50 flex flex-col shrink-0">
+        <div className="p-8 border-b border-slate-100 bg-white flex justify-between items-center">
+          <h3 className="font-black text-xl text-slate-900 tracking-tighter">נושאי שיחה</h3>
+          <button onClick={() => setShowNewTopicModal(true)} className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all">
+            <Plus className="w-5 h-5" />
           </button>
         </div>
         <div className="flex-grow overflow-y-auto">
           {topics.length === 0 ? (
             <div className="p-12 text-center text-slate-300 font-bold italic">אין נושאים פתוחים</div>
           ) : (
-            topics.map(topic => (
+            topics.sort((a,b) => b.timestamp - a.timestamp).map(topic => (
               <button 
                 key={topic.id}
                 onClick={() => setActiveTopic(topic)}
-                className={`w-full p-6 text-right border-b border-slate-100 transition-all hover:bg-white flex flex-col gap-1 ${activeTopic?.id === topic.id ? 'bg-white border-r-4 border-r-indigo-600 shadow-sm' : ''}`}
+                className={`w-full p-6 text-right border-b border-slate-100 transition-all hover:bg-white flex flex-col gap-1.5 ${activeTopic?.id === topic.id ? 'bg-white border-r-4 border-r-indigo-600 shadow-sm' : ''}`}
               >
-                <span className="font-black text-slate-800 text-sm line-clamp-1">{topic.title}</span>
-                <span className="text-[10px] text-slate-400 font-bold">{topic.author} | {topic.messages.length} תגובות</span>
+                <span className="font-black text-slate-800 text-sm">{topic.title}</span>
+                <div className="flex justify-between items-center w-full">
+                  <span className="text-[10px] text-slate-400 font-bold">{topic.author}</span>
+                  <span className="bg-slate-200 text-slate-500 text-[9px] px-2 py-0.5 rounded-full font-black">{topic.messages.length}</span>
+                </div>
               </button>
             ))
           )}
         </div>
       </div>
 
-      {/* Main: Message Thread */}
+      {/* Main Chat Area */}
       <div className="flex-grow flex flex-col bg-white">
         {activeTopic ? (
           <>
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/30">
+            <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-white">
               <div>
-                <h4 className="font-black text-xl text-slate-900 tracking-tight">{activeTopic.title}</h4>
-                <p className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
-                  נוצר על ידי {activeTopic.author} 
-                  <span className="opacity-40">•</span>
-                  מסונכרן לכל המכשירים
-                </p>
+                <h4 className="font-black text-2xl text-slate-900 tracking-tighter">{activeTopic.title}</h4>
+                <div className="flex items-center gap-2 mt-1">
+                   <span className="text-[11px] text-slate-400 font-bold">מאת: {activeTopic.author}</span>
+                   <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
+                   <span className="text-[11px] text-emerald-500 font-black flex items-center gap-1">
+                     <Wifi className="w-3 h-3" /> מחובר לענן
+                   </span>
+                </div>
               </div>
               <button onClick={() => setActiveTopic(null)} className="md:hidden p-2 text-slate-400 hover:text-slate-600">
-                <ChevronLeft className="w-5 h-5" />
+                <ChevronLeft className="w-6 h-6" />
               </button>
             </div>
             
-            <div ref={scrollRef} className="flex-grow p-6 overflow-y-auto space-y-4 bg-white">
+            <div ref={scrollRef} className="flex-grow p-8 overflow-y-auto space-y-6 bg-slate-50/20">
               {activeTopic.messages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4">
-                  <MessageCircle className="w-12 h-12 opacity-20" />
-                  <p className="font-bold">היו הראשונים להגיב בנושא זה</p>
+                <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4 opacity-40">
+                  <MessageCircle className="w-16 h-16" />
+                  <p className="font-bold text-lg">אין הודעות עדיין. תהיו הראשונים!</p>
                 </div>
               ) : (
-                activeTopic.messages.map(msg => (
-                  <div key={msg.id} className={`flex flex-col ${msg.author === userName ? 'items-start' : 'items-end'}`}>
-                    <div className={`group relative max-w-[85%] p-4 rounded-2xl shadow-sm text-sm font-bold transition-all ${
-                      msg.author === userName 
-                        ? 'bg-indigo-600 text-white rounded-bl-none ml-auto text-right' 
-                        : 'bg-slate-100 text-slate-700 rounded-br-none mr-auto text-right'
-                    }`}>
-                      {msg.text}
-                      <span className={`absolute bottom-1 px-2 text-[8px] opacity-0 group-hover:opacity-60 transition-opacity ${msg.author === userName ? 'left-0' : 'right-0'}`}>
-                        {formatTime(msg.timestamp)}
-                      </span>
+                activeTopic.messages.map(msg => {
+                  const isMe = msg.author === userName;
+                  return (
+                    <div key={msg.id} className={`flex flex-col ${isMe ? 'items-start' : 'items-end'}`}>
+                      <div className={`max-w-[80%] p-4 rounded-3xl shadow-sm text-sm font-bold leading-relaxed ${
+                        isMe 
+                          ? 'bg-indigo-600 text-white rounded-bl-none ml-auto text-right' 
+                          : 'bg-white border border-slate-100 text-slate-700 rounded-br-none mr-auto text-right'
+                      }`}>
+                        {msg.text}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1.5 px-2">
+                         <span className="text-[9px] text-slate-400 font-bold">{msg.author}</span>
+                         <span className="text-[9px] text-slate-300 font-medium">{formatTime(msg.timestamp)}</span>
+                      </div>
                     </div>
-                    <span className="text-[9px] text-slate-400 font-bold mt-1 px-1">{msg.author}</span>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
-            <div className="p-4 border-t border-slate-100 bg-white flex gap-3">
+            <div className="p-6 border-t border-slate-100 bg-white flex gap-4">
               <input 
-                className="flex-grow bg-slate-50 border border-slate-200 rounded-2xl px-5 py-3.5 outline-none font-bold text-sm focus:border-indigo-400 transition-all"
-                placeholder="כתבו הודעה..."
+                className="flex-grow bg-slate-50 border border-slate-200 rounded-[1.5rem] px-6 py-4 outline-none font-bold text-sm focus:border-indigo-400 focus:bg-white transition-all shadow-inner"
+                placeholder="כתבו הודעה לקהילה..."
                 value={newMessageText}
                 onChange={e => setNewMessageText(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    addMessage();
-                  }
-                }}
+                onKeyDown={e => e.key === 'Enter' && addMessage()}
               />
               <button 
                 onClick={addMessage}
                 disabled={!newMessageText.trim()}
-                className="p-3.5 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:shadow-none"
+                className="w-14 h-14 bg-indigo-600 text-white rounded-2xl shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-30 flex items-center justify-center shrink-0"
               >
-                <Send className="w-5 h-5" />
+                <Send className="w-6 h-6" />
               </button>
             </div>
           </>
         ) : (
-          <div className="flex-grow flex flex-col items-center justify-center p-20 text-center gap-6">
-             <div className="bg-indigo-50 p-8 rounded-full text-indigo-300 animate-pulse">
-                <MessageSquarePlus className="w-12 h-12" />
+          <div className="flex-grow flex flex-col items-center justify-center p-20 text-center gap-8">
+             <div className="bg-indigo-50 p-10 rounded-full text-indigo-200">
+                <MessageSquarePlus className="w-16 h-16" />
              </div>
              <div>
-                <h4 className="text-2xl font-black text-slate-800 tracking-tighter">צ'אט מסונכרן חוצה מכשירים</h4>
-                <p className="text-slate-400 font-bold mt-2 max-w-sm mx-auto">
-                  הודעות נשמרות בענן ומופיעות באופן אוטומטי אצל כל המשתמשים. בחרו נושא או פתחו אחד חדש.
+                <h4 className="text-3xl font-black text-slate-900 tracking-tighter">מרכז התקשורת של הקהילה</h4>
+                <p className="text-slate-400 font-bold mt-3 max-w-sm mx-auto leading-relaxed">
+                  כל ההודעות מסונכרנות עכשיו ב-Cloud. בחרו נושא או פתחו אחד חדש כדי להתחיל.
                 </p>
              </div>
-             <button onClick={() => setShowNewTopicModal(true)} className="px-10 py-4 bg-indigo-600 text-white rounded-[2rem] font-black shadow-xl shadow-indigo-100 hover:scale-105 transition-all">
-                פתח נושא חדש לשיחה
+             <button onClick={() => setShowNewTopicModal(true)} className="px-12 py-5 bg-indigo-600 text-white rounded-[2rem] font-black shadow-2xl shadow-indigo-100 hover:scale-105 active:scale-95 transition-all">
+                פתח נושא חדש לדיון
              </button>
           </div>
         )}
@@ -309,20 +290,23 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
 
       {/* New Topic Modal */}
       {showNewTopicModal && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 space-y-6">
-            <h3 className="text-2xl font-black text-slate-900">פתיחת נושא חדש</h3>
-            <input 
-              autoFocus
-              className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-sm"
-              placeholder="מה הנושא שתרצו להעלות?"
-              value={newTopicTitle}
-              onChange={e => setNewTopicTitle(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && createTopic()}
-            />
-            <div className="flex gap-4">
-               <button onClick={createTopic} className="flex-grow py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg hover:bg-indigo-700 transition-all text-sm">צור נושא</button>
-               <button onClick={() => setShowNewTopicModal(false)} className="px-8 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all text-sm">ביטול</button>
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl p-10 space-y-8 animate-in zoom-in duration-300">
+            <h3 className="text-3xl font-black text-slate-900 text-center">נושא חדש</h3>
+            <div className="space-y-4">
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest text-center">שם הנושא / הכותרת</label>
+              <input 
+                autoFocus
+                className="w-full px-8 py-5 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-center text-lg"
+                placeholder="למשל: עדכונים מהפיזיותרפיה"
+                value={newTopicTitle}
+                onChange={e => setNewTopicTitle(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && createTopic()}
+              />
+            </div>
+            <div className="flex flex-col gap-3">
+               <button onClick={createTopic} className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black shadow-xl hover:bg-indigo-700 transition-all">צור נושא עכשיו</button>
+               <button onClick={() => setShowNewTopicModal(false)} className="w-full py-4 text-slate-400 font-bold hover:text-slate-600 transition-all text-sm">ביטול</button>
             </div>
           </div>
         </div>
