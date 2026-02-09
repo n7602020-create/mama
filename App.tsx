@@ -9,7 +9,7 @@ import ChatSystem from './components/ChatSystem';
 import AdModal from './components/AdModal';
 import { CareEvent, AppSettings, ChatTopic } from './types';
 import { getEvents, saveEvents, getSettings, saveSettings, getChatTopics, saveChatTopics } from './services/storage';
-import { Wifi, RefreshCw, Bell } from 'lucide-react';
+import { Wifi, RefreshCw, Bell, BellRing } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -38,11 +38,14 @@ const App: React.FC = () => {
     if ("Notification" in window) {
       Notification.requestPermission().then(permission => {
         setNotificationPermission(permission);
+        if (permission === 'granted') {
+          new Notification("ההתראות הופעלו!", { body: "עכשיו תקבלו עדכונים בזמן אמת" });
+        }
       });
     }
   };
 
-  // פונקציית השמעת צליל
+  // פונקציית צליל משופרת
   const playNotificationSound = () => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -50,23 +53,23 @@ const App: React.FC = () => {
       const gainNode = audioCtx.createGain();
       
       oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
-      oscillator.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.5);
+      oscillator.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+      oscillator.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1);
       
       gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
       
       oscillator.connect(gainNode);
       gainNode.connect(audioCtx.destination);
       
       oscillator.start();
-      oscillator.stop(audioCtx.currentTime + 0.5);
+      oscillator.stop(audioCtx.currentTime + 0.4);
     } catch (e) {
-      console.error("Audio failed", e);
+      console.error("Sound failed", e);
     }
   };
 
-  // טעינה וסנכרון
+  // טעינה וסנכרון אמת
   const syncData = useCallback(async () => {
     setIsSyncing(true);
     try {
@@ -79,24 +82,26 @@ const App: React.FC = () => {
       setEvents(remoteEvents);
       setSettings(remoteSettings);
       
-      // בדיקה אם הגיעו הודעות חדשות עבור התראה
       const currentMsgCount = remoteChat.reduce((acc, t) => acc + t.messages.length, 0);
+      
+      // אם יש הודעה חדשה
       if (lastMsgCountRef.current !== 0 && currentMsgCount > lastMsgCountRef.current) {
         if (!showChat || document.hidden) {
           playNotificationSound();
           if (Notification.permission === 'granted') {
-            new Notification("הודעה חדשה בצ'אט רוחי", {
-              body: "יש עדכונים חדשים בקהילה",
-              icon: "/favicon.ico"
+            new Notification("הודעה חדשה בקהילה", {
+              body: "מישהו כתב עכשיו בצ'אט של רוחי",
+              icon: "https://cdn-icons-png.flaticon.com/512/733/733585.png"
             });
           }
           document.title = `* הודעה חדשה! * ${originalTitle.current}`;
         }
       }
+      
       lastMsgCountRef.current = currentMsgCount;
       setChatTopics(remoteChat);
     } catch (e) {
-      console.error("Sync error:", e);
+      console.error("Sync loop error:", e);
     } finally {
       setIsSyncing(false);
     }
@@ -104,11 +109,11 @@ const App: React.FC = () => {
 
   useEffect(() => {
     syncData();
-    const interval = setInterval(syncData, 4000);
+    // סנכרון מהיר כל 3 שניות
+    const interval = setInterval(syncData, 3000);
     return () => clearInterval(interval);
   }, [syncData]);
 
-  // איפוס הכותרת כשנכנסים לצ'אט
   useEffect(() => {
     if (showChat) {
       document.title = originalTitle.current;
@@ -147,21 +152,21 @@ const App: React.FC = () => {
         isChatOpen={showChat}
       />
 
-      {/* Cloud Sync Status and Notification Permission */}
+      {/* Cloud Sync Status and Notifications Panel */}
       <div className="fixed bottom-6 left-6 z-[100] flex flex-col gap-3 items-start">
-        {notificationPermission === 'default' && (
+        {notificationPermission !== 'granted' && (
           <button 
             onClick={requestPermission}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-[10px] font-black animate-bounce"
+            className="bg-indigo-600 text-white px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2 text-xs font-black animate-bounce hover:bg-indigo-700 transition-all"
           >
-            <Bell className="w-3 h-3" />
-            אפשר התראות
+            <BellRing className="w-4 h-4" />
+            הפעל התראות לנייד
           </button>
         )}
         <div className={`transition-all duration-500 ${isSyncing ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
           <div className="bg-white/90 backdrop-blur-md border border-slate-100 px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
             <Wifi className="w-3 h-3 text-emerald-500 animate-pulse" />
-            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">סנכרון ענן פעיל</span>
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">ענן מסונכרן</span>
           </div>
         </div>
       </div>
@@ -245,13 +250,9 @@ const App: React.FC = () => {
 
       {showAdModal && <AdModal ads={settings.ads} onClose={() => setShowAdModal(false)} />}
 
-      <footer className="mt-20 py-12 border-t border-slate-300 bg-white/80 backdrop-blur-md shadow-inner">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-indigo-600 rounded-xl"></div>
-            <p className="text-xl font-bold text-slate-900">רוחי</p>
-          </div>
-          <p className="text-xs font-bold text-slate-500 text-center md:text-right">© 2025. מערכת חכמה לניהול ליווי וביקורים - הנתונים מסונכרנים בענן.</p>
+      <footer className="mt-20 py-12 border-t border-slate-300 bg-white/80 backdrop-blur-md shadow-inner text-center">
+        <div className="max-w-7xl mx-auto px-4">
+          <p className="text-xs font-bold text-slate-500">© 2025. מערכת מסונכרנת בזמן אמת עבור משפחת הורביץ והקהילה.</p>
         </div>
       </footer>
     </div>

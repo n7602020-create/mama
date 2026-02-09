@@ -6,14 +6,18 @@ export interface ChatUser {
   pass: string;
 }
 
-// מפתח ייחודי משופר לסנכרון גלובלי
-const BUCKET_ID = 'ruhi_care_v2_final_sync_stable';
+// מפתח ענן ייחודי וחדש לחלוטין לסנכרון יציב
+const BUCKET_ID = 'ruhi_final_v3_secure_sync_2025';
 const BASE_URL = `https://kvdb.io/A4rY3qN6u1e5u7y9s9z2r/${BUCKET_ID}`;
 
-// פונקציות עזר לתקשורת עם הענן
+// פונקציות עזר לתקשורת עם הענן - עם ביטול Caching
 async function remoteGet<T>(key: string, defaultValue: T): Promise<T> {
   try {
-    const response = await fetch(`${BASE_URL}_${key}`, { cache: 'no-store' });
+    const response = await fetch(`${BASE_URL}_${key}`, { 
+      method: 'GET',
+      cache: 'no-store', // מבטיח שהדפדפן לא יציג נתונים ישנים
+      headers: { 'Cache-Control': 'no-cache' }
+    });
     if (!response.ok) return defaultValue;
     const text = await response.text();
     return text ? JSON.parse(text) : defaultValue;
@@ -30,27 +34,18 @@ async function remoteSave<T>(key: string, data: T): Promise<void> {
       body: JSON.stringify(data),
       headers: { 'Content-Type': 'application/json' }
     });
+    // שמירה מקומית לגיבוי מהיר
     localStorage.setItem(`${BUCKET_ID}_${key}`, JSON.stringify(data));
   } catch (e) {
     console.error(`Error saving ${key} to cloud:`, e);
   }
 }
 
-export const getEvents = async (): Promise<CareEvent[]> => {
-  return remoteGet<CareEvent[]>('events', []);
-};
+export const getEvents = async (): Promise<CareEvent[]> => remoteGet<CareEvent[]>('events', []);
+export const saveEvents = async (events: CareEvent[]) => remoteSave('events', events);
 
-export const saveEvents = async (events: CareEvent[]) => {
-  await remoteSave('events', events);
-};
-
-export const getChatTopics = async (): Promise<ChatTopic[]> => {
-  return remoteGet<ChatTopic[]>('chat', []);
-};
-
-export const saveChatTopics = async (topics: ChatTopic[]) => {
-  await remoteSave('chat', topics);
-};
+export const getChatTopics = async (): Promise<ChatTopic[]> => remoteGet<ChatTopic[]>('chat', []);
+export const saveChatTopics = async (topics: ChatTopic[]) => remoteSave('chat', topics);
 
 export const getSettings = async (): Promise<AppSettings> => {
   const defaultSettings: AppSettings = {
@@ -86,9 +81,7 @@ export const getSettings = async (): Promise<AppSettings> => {
   return remoteGet<AppSettings>('settings', defaultSettings);
 };
 
-export const saveSettings = async (settings: AppSettings) => {
-  await remoteSave('settings', settings);
-};
+export const saveSettings = async (settings: AppSettings) => remoteSave('settings', settings);
 
 export const getChatUsers = (): ChatUser[] => {
   const data = localStorage.getItem('ruhi_chat_users_v1');
