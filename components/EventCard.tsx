@@ -8,8 +8,9 @@ interface EventCardProps {
   onClick?: () => void;
 }
 
+// Note: This component is currently unused in the main PublicView table but kept for future mobile/list views.
 const EventCard: React.FC<EventCardProps> = ({ event, onClick }) => {
-  const isEscort = event.type === EventType.Escort;
+  const isEscort = event.slotId.includes('s1') || event.slotId.includes('s3'); // Placeholder logic
   const isPending = event.status === EventStatus.Pending;
 
   return (
@@ -29,12 +30,12 @@ const EventCard: React.FC<EventCardProps> = ({ event, onClick }) => {
         </div>
         <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold text-slate-400">
           <Clock className="w-3 h-3" />
-          {event.startTime}-{event.endTime}
+          {event.date}
         </div>
       </div>
 
       <h3 className={`text-sm font-bold truncate ${isEscort ? 'text-indigo-900' : 'text-emerald-900'}`}>
-        {event.personnel || 'פנוי לשיבוץ'}
+        {event.registrationData.firstName} {event.registrationData.lastName}
       </h3>
       
       <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">
@@ -44,14 +45,6 @@ const EventCard: React.FC<EventCardProps> = ({ event, onClick }) => {
       {isPending && (
         <div className="absolute top-2 left-2 animate-pulse">
           <AlertCircle className="w-4 h-4 text-amber-500" />
-        </div>
-      )}
-
-      {!event.personnel && (
-        <div className="mt-3">
-          <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${isEscort ? 'bg-indigo-600 text-white' : 'bg-emerald-600 text-white'}`}>
-            הזמן עכשיו
-          </span>
         </div>
       )}
     </div>

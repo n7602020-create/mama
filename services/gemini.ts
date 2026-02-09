@@ -3,42 +3,54 @@ import { GoogleGenAI } from "@google/genai";
 import { CareEvent, EventType } from "../types";
 import { getSettings } from "./storage";
 
-// Using the Google GenAI SDK to analyze the care schedule.
 export const analyzeScheduleWithAI = async (events: CareEvent[]): Promise<string> => {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
-    // Fetch current settings to resolve slot labels and types, as they are not stored directly on the CareEvent.
     const settings = getSettings();
 
-    // Map events to a descriptive summary, resolving missing properties from registrationData and settings.
-    const scheduleSummary = events.map(e => {
-      const slot = settings.slots.find(s => s.id === e.slotId);
-      const personnel = `${e.registrationData.firstName || ''} ${e.registrationData.lastName || ''}`.trim();
-      const typeLabel = slot?.type === EventType.Escort ? 'מלווה' : 'מבקר';
-      const slotLabel = slot?.label || 'משבצת';
-      return `${e.date}: ${slotLabel} (${typeLabel}) - ${personnel || 'ריק'}`;
-    }).join('\n');
+    // Group events by date for a clearer summary
+    const grouped = events.reduce((acc, e) => {
+      if (!acc[e.date]) acc[e.date] = [];
+      acc[e.date].push(e);
+      return acc;
+    }, {} as Record<string, CareEvent[]>);
+
+    const scheduleSummary = Object.entries(grouped)
+      .map(([date, dayEvents]) => {
+        const eventDetails = dayEvents.map(e => {
+          const slot = settings.slots.find(s => s.id === e.slotId);
+          const personnel = `${e.registrationData.firstName || ''} ${e.registrationData.lastName || ''}`.trim();
+          const typeLabel = slot?.type === EventType.Escort ? 'מלווה' : 'מבקר';
+          const slotLabel = slot?.label || 'משבצת';
+          return `- ${slotLabel} (${typeLabel}): ${personnel || 'טרם נרשמו'}`;
+        }).join('\n');
+        return `תאריך ${date}:\n${eventDetails}`;
+      })
+      .join('\n\n');
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `You are an assistant for a rehabilitation care coordinator. 
-      Analyze the following weekly schedule and identify critical gaps (missing escorts or days with no visitors). 
-      Keep it brief and in Hebrew. Mention if safety rules are being met.
+      contents: `אתה עוזר אישי למתאמת טיפול ושיקום עבור "רוחי". 
+      עליך לנתח את סידור העבודה השבועי המצורף ולזהות פערים קריטיים.
       
-      Safety Note: ${settings.safetyNote}
+      דגשים לניתוח:
+      1. האם יש משבצות "מלווה" (Escort) ריקות? (זהו פער קריטי).
+      2. האם יש ימים ללא מבקרים כלל?
+      3. האם הנחיות הבטיחות מתקיימות? הנחיית בטיחות: ${settings.safetyNote}
       
-      Schedule:
-      ${scheduleSummary}`,
+      כתוב סיכום קצר, מעודד ומקצועי בעברית בלבד. 
+      בסוף, הצע הודעה קצרה שאפשר להעתיק לוואטסאפ של המשפחה/קהילה כדי לגייס מתנדבים למשבצות החסרות.
+      
+      הסידור:
+      ${scheduleSummary || 'אין אירועים רשומים כרגע.'}`,
       config: {
-        systemInstruction: "You are a professional care assistant. Respond only in Hebrew. Be helpful and encouraging.",
+        systemInstruction: "You are an expert care coordinator assistant named Ruhi-AI. Your tone is warm, professional, and efficient. You only speak Hebrew.",
       }
     });
 
-    // The result text is accessed via the .text property (not a method).
-    return response.text || "לא הצלחתי לנתח את הלוח כרגע.";
+    return response.text || "לא הצלחתי להפיק תובנות כרגע.";
   } catch (error) {
     console.error("AI Analysis Error:", error);
-    return "שגיאה בחיבור לבינה המלאכותית.";
+    return "חלה שגיאה בחיבור לשירות ה-AI. אנא נסו שוב מאוחר יותר.";
   }
 };

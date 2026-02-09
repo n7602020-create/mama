@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { CareEvent, AppSettings, TimeSlotDef, EventType, AppNotice, Advertisement } from '../types';
-import { LayoutGrid, Settings, ListChecks, CalendarRange, Plus, Trash2, Megaphone, BellRing, Image as ImageIcon } from 'lucide-react';
+import { CareEvent, AppSettings, TimeSlotDef, EventType, AppNotice, Advertisement, EventStatus } from '../types';
+import { LayoutGrid, Settings, ListChecks, CalendarRange, Plus, Trash2, Megaphone, BellRing, Image as ImageIcon, Sparkles, Check, Copy, RefreshCw, Loader2 } from 'lucide-react';
+import { analyzeScheduleWithAI } from '../services/gemini';
 
 interface AdminDashboardProps {
   events: CareEvent[];
@@ -13,10 +14,30 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ events, settings, onUpdateEvents, onUpdateSettings }) => {
   const [activeTab, setActiveTab] = useState<'events' | 'slots' | 'fields' | 'notices' | 'ads' | 'texts'>('events');
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
 
   const updateSettings = (updated: AppSettings) => {
     setLocalSettings(updated);
     onUpdateSettings(updated);
+  };
+
+  const handleAnalyze = async () => {
+    setIsAnalyzing(true);
+    setAiAnalysis(null);
+    const result = await analyzeScheduleWithAI(events);
+    setAiAnalysis(result);
+    setIsAnalyzing(false);
+  };
+
+  const handleConfirmEvent = (eventId: string) => {
+    const updated = events.map(e => e.id === eventId ? { ...e, status: EventStatus.Confirmed } : e);
+    onUpdateEvents(updated);
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert("הניתוח הועתק ללוח!");
   };
 
   const addNotice = () => {
@@ -60,7 +81,37 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ events, settings, onUpd
         
         {activeTab === 'events' && (
           <div className="space-y-6">
-            <h2 className="text-xl font-bold">רשימת נרשמים</h2>
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold">רשימת נרשמים</h2>
+              <button 
+                onClick={handleAnalyze} 
+                disabled={isAnalyzing}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-100 hover:scale-105 transition-all disabled:opacity-50"
+              >
+                {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                נתח עם AI
+              </button>
+            </div>
+
+            {aiAnalysis && (
+              <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 relative animate-in slide-in-from-top-4">
+                <div className="flex items-center gap-2 text-indigo-700 font-bold mb-3">
+                  <Sparkles className="w-4 h-4" />
+                  תובנות בינה מלאכותית
+                </div>
+                <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                  {aiAnalysis}
+                </div>
+                <button 
+                  onClick={() => copyToClipboard(aiAnalysis)}
+                  className="absolute top-4 left-4 p-2 text-indigo-400 hover:text-indigo-600 bg-white rounded-lg shadow-sm"
+                  title="העתק ללוח"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <table className="w-full text-right text-sm">
                 <thead className="bg-slate-50 text-slate-400 text-[11px] font-bold uppercase">
@@ -68,6 +119,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ events, settings, onUpd
                     <th className="px-4 py-3">תאריך</th>
                     <th className="px-4 py-3">משבצת</th>
                     <th className="px-4 py-3">נרשם</th>
+                    <th className="px-4 py-3">סטטוס</th>
                     <th className="px-4 py-3">פעולות</th>
                   </tr>
                 </thead>
@@ -77,19 +129,49 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ events, settings, onUpd
                     return (
                       <tr key={event.id} className="hover:bg-slate-50/50">
                         <td className="px-4 py-4 font-bold">{event.date}</td>
-                        <td className="px-4 py-4">{slot?.label}</td>
+                        <td className="px-4 py-4">
+                          <span className="font-medium text-slate-600">{slot?.label}</span>
+                          <span className="block text-[10px] text-slate-400">{slot?.type === EventType.Escort ? 'מלווה' : 'מבקר'}</span>
+                        </td>
                         <td className="px-4 py-4">
                           <div className="font-bold text-slate-900">{event.registrationData.firstName} {event.registrationData.lastName}</div>
                           <div className="text-[10px] text-slate-400">{event.registrationData.phone}</div>
                         </td>
                         <td className="px-4 py-4">
-                          <button onClick={() => onUpdateEvents(events.filter(e => e.id !== event.id))} className="text-red-400 p-2 hover:bg-red-50 rounded-lg">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            event.status === EventStatus.Confirmed ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'
+                          }`}>
+                            {event.status === EventStatus.Confirmed ? 'מאושר' : 'ממתין'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-1">
+                            {event.status === EventStatus.Pending && (
+                              <button 
+                                onClick={() => handleConfirmEvent(event.id)} 
+                                className="text-emerald-500 p-2 hover:bg-emerald-50 rounded-lg"
+                                title="אשר הגעה"
+                              >
+                                <Check className="w-4 h-4" />
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => onUpdateEvents(events.filter(e => e.id !== event.id))} 
+                              className="text-red-400 p-2 hover:bg-red-50 rounded-lg"
+                              title="מחק רישום"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
                   })}
+                  {events.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-20 text-center text-slate-300 font-bold italic">אין נרשמים כרגע</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

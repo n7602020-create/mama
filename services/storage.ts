@@ -11,6 +11,9 @@ export interface ChatUser {
   pass: string;
 }
 
+// Helper to simulate network delay for future real-time integration
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const getEvents = (): CareEvent[] => {
   const data = localStorage.getItem(EVENTS_KEY);
   return data ? JSON.parse(data) : [];
@@ -23,6 +26,18 @@ export const saveEvents = (events: CareEvent[]) => {
 export const getChatTopics = (): ChatTopic[] => {
   const data = localStorage.getItem(CHAT_KEY);
   return data ? JSON.parse(data) : [];
+};
+
+// Simulated cloud sync - In a real Vercel app, this would be a fetch to a database
+export const syncChatTopics = async (localTopics: ChatTopic[]): Promise<ChatTopic[]> => {
+  // Save locally
+  localStorage.setItem(CHAT_KEY, JSON.stringify(localTopics));
+  
+  // In a real scenario, we would fetch from a remote server here:
+  // const remote = await fetch('/api/chat').then(res => res.json());
+  // return mergeTopics(localTopics, remote);
+  
+  return localTopics;
 };
 
 export const saveChatTopics = (topics: ChatTopic[]) => {

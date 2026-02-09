@@ -26,10 +26,21 @@ const App: React.FC = () => {
     setEvents(getEvents());
     setSettings(s);
     setChatTopics(getChatTopics());
+    
+    // Listen for storage changes from other tabs on same device
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'ruhi_care_events_v3') setEvents(getEvents());
+      if (e.key === 'ruhi_chat_v1') setChatTopics(getChatTopics());
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+
     // Show community ads on entry
     if (s.ads && s.ads.length > 0) {
       setShowAdModal(true);
     }
+    
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   const handleUpdateEvents = useCallback((newEvents: CareEvent[]) => {
@@ -65,8 +76,8 @@ const App: React.FC = () => {
           <div className="animate-in fade-in duration-500 space-y-10">
              <div className="flex items-center justify-between border-b border-slate-300 pb-6">
                 <div>
-                  <h1 className="text-3xl font-bold text-slate-900 tracking-tight">ניהול המערכת</h1>
-                  <p className="text-slate-500 text-xs font-bold mt-1">שליטה מלאה בלוח, בהנחיות ובפרסום</p>
+                  <h1 className="text-3xl font-bold text-slate-900 tracking-tight text-right">ניהול המערכת</h1>
+                  <p className="text-slate-500 text-xs font-bold mt-1 text-right">שליטה מלאה בלוח, בהנחיות ובפרסום</p>
                 </div>
                 <button 
                   onClick={() => setIsAdmin(false)} 
@@ -145,7 +156,7 @@ const App: React.FC = () => {
             <div className="w-8 h-8 bg-indigo-600 rounded-xl"></div>
             <p className="text-xl font-bold text-slate-900">רוחי</p>
           </div>
-          <p className="text-xs font-bold text-slate-500">© 2025. מערכת חכמה לניהול ליווי וביקורים שיקומיים.</p>
+          <p className="text-xs font-bold text-slate-500 text-center md:text-right">© 2025. מערכת חכמה לניהול ליווי וביקורים שיקומיים - מעודכן בזמן אמת.</p>
         </div>
       </footer>
     </div>
