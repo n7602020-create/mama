@@ -6,7 +6,8 @@ import { getSettings } from "./storage";
 export const analyzeScheduleWithAI = async (events: CareEvent[]): Promise<string> => {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const settings = getSettings();
+    // Fix: Await the promise returned by getSettings() to access its properties like slots and safetyNote
+    const settings = await getSettings();
 
     // Group events by date for a clearer summary
     const grouped = events.reduce((acc, e) => {

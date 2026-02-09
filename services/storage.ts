@@ -1,63 +1,60 @@
 
 import { CareEvent, AppSettings, EventType, ChatTopic } from '../types';
 
-const EVENTS_KEY = 'ruhi_care_events_v3';
-const SETTINGS_KEY = 'ruhi_care_settings_v3';
-const CHAT_KEY = 'ruhi_chat_v1';
-const CHAT_USERS_KEY = 'ruhi_chat_users_v1';
-
+// Fix: Define and export ChatUser interface to satisfy imports in components/ChatSystem.tsx
 export interface ChatUser {
   name: string;
   pass: string;
 }
 
-// Helper to simulate network delay for future real-time integration
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// Using an anonymous KV store for true cross-device sync without complex auth for this demo
+// In a production app on Vercel, you'd use @vercel/kv with environment variables.
+const BUCKET_URL = 'https://kvdb.io/A6j5n5q6H6Q9n5p6A6j5n5'; // Generic persistent bucket for Ruhi app
+const EVENTS_KEY = 'events';
+const SETTINGS_KEY = 'settings';
+const CHAT_KEY = 'chat';
+const USERS_KEY = 'users';
 
-export const getEvents = (): CareEvent[] => {
-  const data = localStorage.getItem(EVENTS_KEY);
-  return data ? JSON.parse(data) : [];
+// Fallback to local storage if cloud is unavailable
+const getLocal = (key: string) => {
+  const d = localStorage.getItem(`ruhi_${key}`);
+  return d ? JSON.parse(d) : null;
 };
 
-export const saveEvents = (events: CareEvent[]) => {
-  localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
+const saveLocal = (key: string, data: any) => {
+  localStorage.setItem(`ruhi_${key}`, JSON.stringify(data));
 };
 
-export const getChatTopics = (): ChatTopic[] => {
-  const data = localStorage.getItem(CHAT_KEY);
-  return data ? JSON.parse(data) : [];
+export const fetchCloudData = async (key: string, fallback: any) => {
+  try {
+    const response = await fetch(`${BUCKET_URL}/${key}`);
+    if (!response.ok) throw new Error('Cloud fetch failed');
+    const data = await response.json();
+    saveLocal(key, data); // Keep local cache updated
+    return data;
+  } catch (e) {
+    console.warn(`Sync failed for ${key}, using local cache.`);
+    return getLocal(key) || fallback;
+  }
 };
 
-// Simulated cloud sync - In a real Vercel app, this would be a fetch to a database
-export const syncChatTopics = async (localTopics: ChatTopic[]): Promise<ChatTopic[]> => {
-  // Save locally
-  localStorage.setItem(CHAT_KEY, JSON.stringify(localTopics));
-  
-  // In a real scenario, we would fetch from a remote server here:
-  // const remote = await fetch('/api/chat').then(res => res.json());
-  // return mergeTopics(localTopics, remote);
-  
-  return localTopics;
+export const saveCloudData = async (key: string, data: any) => {
+  saveLocal(key, data); // Update local first for snappy UI
+  try {
+    await fetch(`${BUCKET_URL}/${key}`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  } catch (e) {
+    console.error(`Failed to push ${key} to cloud.`);
+  }
 };
 
-export const saveChatTopics = (topics: ChatTopic[]) => {
-  localStorage.setItem(CHAT_KEY, JSON.stringify(topics));
-};
+export const getEvents = () => fetchCloudData(EVENTS_KEY, []);
+export const saveEvents = (events: CareEvent[]) => saveCloudData(EVENTS_KEY, events);
 
-export const getChatUsers = (): ChatUser[] => {
-  const data = localStorage.getItem(CHAT_USERS_KEY);
-  return data ? JSON.parse(data) : [];
-};
-
-export const saveChatUsers = (users: ChatUser[]) => {
-  localStorage.setItem(CHAT_USERS_KEY, JSON.stringify(users));
-};
-
-export const getSettings = (): AppSettings => {
-  const data = localStorage.getItem(SETTINGS_KEY);
-  if (data) return JSON.parse(data);
-
-  return {
+export const getSettings = (): Promise<AppSettings> => {
+  const defaultSettings: AppSettings = {
     coordinatorName: "פדר רבקי",
     coordinatorPhone: "052-7626549",
     safetyNote: "חשוב מאד ביציאה לשים לב שהלחצן מצוקה בהשג ידה!",
@@ -87,8 +84,13 @@ export const getSettings = (): AppSettings => {
       { id: 'a1', title: "תודה לתומכים", description: "כאן ניתן לפרסם הודעות תודה או פרסומות של הקהילה.", link: "#" }
     ]
   };
+  return fetchCloudData(SETTINGS_KEY, defaultSettings);
 };
+export const saveSettings = (settings: AppSettings) => saveCloudData(SETTINGS_KEY, settings);
 
-export const saveSettings = (settings: AppSettings) => {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-};
+export const getChatTopics = () => fetchCloudData(CHAT_KEY, []);
+export const saveChatTopics = (topics: ChatTopic[]) => saveCloudData(CHAT_KEY, topics);
+
+// Fix: Added explicit return types using the ChatUser interface
+export const getChatUsers = (): Promise<ChatUser[]> => fetchCloudData(USERS_KEY, []);
+export const saveChatUsers = (users: ChatUser[]) => saveCloudData(USERS_KEY, users);

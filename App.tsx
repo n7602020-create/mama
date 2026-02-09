@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Header from './components/Header';
 import PublicView from './components/PublicView';
 import AdminDashboard from './components/AdminDashboard';
@@ -9,6 +9,7 @@ import ChatSystem from './components/ChatSystem';
 import AdModal from './components/AdModal';
 import { CareEvent, AppSettings, ChatTopic } from './types';
 import { getEvents, saveEvents, getSettings, saveSettings, getChatTopics, saveChatTopics } from './services/storage';
+import { Wifi, WifiOff, RefreshCw } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -20,48 +21,82 @@ const App: React.FC = () => {
   const [chatTopics, setChatTopics] = useState<ChatTopic[]>([]);
   const [weekOffset, setWeekOffset] = useState(0);
   const [regParams, setRegParams] = useState<{date: string, slotId: string} | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('syncing');
+
+  const initialLoadDone = useRef(false);
+
+  // Background Sync Loop
+  const syncData = useCallback(async (isInitial = false) => {
+    if (!isInitial) setSyncStatus('syncing');
+    try {
+      const [newEvents, newSettings, newChat] = await Promise.all([
+        getEvents(),
+        getSettings(),
+        getChatTopics()
+      ]);
+      
+      setEvents(newEvents);
+      setSettings(newSettings);
+      setChatTopics(newChat);
+      setSyncStatus('synced');
+      
+      if (isInitial && newSettings.ads?.length > 0) {
+        setShowAdModal(true);
+      }
+    } catch (e) {
+      setSyncStatus('error');
+    }
+  }, []);
 
   useEffect(() => {
-    const s = getSettings();
-    setEvents(getEvents());
-    setSettings(s);
-    setChatTopics(getChatTopics());
+    syncData(true);
     
-    // Listen for storage changes from other tabs on same device
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'ruhi_care_events_v3') setEvents(getEvents());
-      if (e.key === 'ruhi_chat_v1') setChatTopics(getChatTopics());
-    };
-    
-    window.addEventListener('storage', handleStorageChange);
+    // Polling every 10 seconds for general data (events/settings)
+    const interval = setInterval(() => {
+      syncData();
+    }, 10000);
 
-    // Show community ads on entry
-    if (s.ads && s.ads.length > 0) {
-      setShowAdModal(true);
-    }
-    
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+    return () => clearInterval(interval);
+  }, [syncData]);
 
-  const handleUpdateEvents = useCallback((newEvents: CareEvent[]) => {
+  const handleUpdateEvents = useCallback(async (newEvents: CareEvent[]) => {
     setEvents(newEvents);
-    saveEvents(newEvents);
+    await saveEvents(newEvents);
   }, []);
 
-  const handleUpdateSettings = useCallback((newSettings: AppSettings) => {
+  const handleUpdateSettings = useCallback(async (newSettings: AppSettings) => {
     setSettings(newSettings);
-    saveSettings(newSettings);
+    await saveSettings(newSettings);
   }, []);
 
-  const handleUpdateChat = useCallback((newTopics: ChatTopic[]) => {
+  const handleUpdateChat = useCallback(async (newTopics: ChatTopic[]) => {
     setChatTopics(newTopics);
-    saveChatTopics(newTopics);
+    await saveChatTopics(newTopics);
   }, []);
 
-  if (!settings) return null;
+  if (!settings) return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="text-center space-y-4">
+        <RefreshCw className="w-10 h-10 text-indigo-500 animate-spin mx-auto" />
+        <p className="font-bold text-slate-400">מתחבר למערכת הענן...</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-200 text-slate-900 font-['Assistant'] pb-20 transition-colors duration-500">
+      {/* Global Sync Indicator */}
+      <div className="fixed bottom-4 left-4 z-[400] flex items-center gap-2 px-3 py-1.5 bg-white/90 backdrop-blur rounded-full border border-slate-100 shadow-lg pointer-events-none">
+        <div className={`w-2 h-2 rounded-full ${
+          syncStatus === 'synced' ? 'bg-emerald-500' : 
+          syncStatus === 'syncing' ? 'bg-amber-400 animate-pulse' : 'bg-red-500'
+        }`}></div>
+        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
+          {syncStatus === 'synced' ? <Wifi className="w-3 h-3" /> : syncStatus === 'error' ? <WifiOff className="w-3 h-3" /> : <RefreshCw className="w-3 h-3 animate-spin" />}
+          {syncStatus === 'synced' ? 'מסונכרן' : syncStatus === 'error' ? 'שגיאת חיבור' : 'מסנכרן...'}
+        </span>
+      </div>
+
       <Header 
         isAdmin={isAdmin} 
         settings={settings}
@@ -77,7 +112,7 @@ const App: React.FC = () => {
              <div className="flex items-center justify-between border-b border-slate-300 pb-6">
                 <div>
                   <h1 className="text-3xl font-bold text-slate-900 tracking-tight text-right">ניהול המערכת</h1>
-                  <p className="text-slate-500 text-xs font-bold mt-1 text-right">שליטה מלאה בלוח, בהנחיות ובפרסום</p>
+                  <p className="text-slate-500 text-xs font-bold mt-1 text-right">סנכרון ענן פעיל - כל שינוי נקלט בכל המכשירים</p>
                 </div>
                 <button 
                   onClick={() => setIsAdmin(false)} 
@@ -141,8 +176,9 @@ const App: React.FC = () => {
           slotId={regParams.slotId} 
           settings={settings} 
           onClose={() => setRegParams(null)} 
-          onSave={(ev) => {
-            handleUpdateEvents([...events, ev]);
+          onSave={async (ev) => {
+            const updated = [...events, ev];
+            handleUpdateEvents(updated);
             setRegParams(null);
           }}
         />
@@ -156,7 +192,7 @@ const App: React.FC = () => {
             <div className="w-8 h-8 bg-indigo-600 rounded-xl"></div>
             <p className="text-xl font-bold text-slate-900">רוחי</p>
           </div>
-          <p className="text-xs font-bold text-slate-500 text-center md:text-right">© 2025. מערכת חכמה לניהול ליווי וביקורים שיקומיים - מעודכן בזמן אמת.</p>
+          <p className="text-xs font-bold text-slate-500 text-center md:text-right">© 2025. מערכת מסונכרנת ענן בזמן אמת - Vercel Optimized.</p>
         </div>
       </footer>
     </div>

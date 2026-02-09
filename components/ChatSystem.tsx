@@ -23,13 +23,18 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
   
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Sync Logic - Polling every 5 seconds to simulate real-time
+  // Initial users load
   useEffect(() => {
-    setUsers(getChatUsers());
+    const loadUsers = async () => {
+      const u = await getChatUsers();
+      setUsers(u);
+    };
+    loadUsers();
     
+    // Polling faster for chat (every 3 seconds)
     const syncInterval = setInterval(() => {
       refreshTopics();
-    }, 5000);
+    }, 3000);
 
     return () => clearInterval(syncInterval);
   }, []);
@@ -41,39 +46,39 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
     }
   }, [activeTopic?.messages]);
 
-  const refreshTopics = () => {
+  const refreshTopics = async () => {
     setIsSyncing(true);
-    const updated = getChatTopics();
+    const updated = await getChatTopics();
     onUpdateTopics(updated);
     
-    // If we have an active topic, update it from the refreshed list
     if (activeTopic) {
       const refreshedActive = updated.find(t => t.id === activeTopic.id);
       if (refreshedActive && JSON.stringify(refreshedActive.messages) !== JSON.stringify(activeTopic.messages)) {
         setActiveTopic(refreshedActive);
       }
     }
-    
-    setTimeout(() => setIsSyncing(false), 800);
+    setTimeout(() => setIsSyncing(false), 500);
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userName || !userPass) return;
-    if (users.find(u => u.name === userName)) {
+    const currentUsers = await getChatUsers();
+    if (currentUsers.find((u: any) => u.name === userName)) {
       alert("שם משתמש תפוס");
       return;
     }
-    const newList = [...users, { name: userName, pass: userPass }];
+    const newList = [...currentUsers, { name: userName, pass: userPass }];
     setUsers(newList);
-    saveChatUsers(newList);
+    await saveChatUsers(newList);
     alert("נרשמת בהצלחה! כעת ניתן להתחבר.");
     setView('login');
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = users.find(u => u.name === userName && u.pass === userPass);
+    const currentUsers = await getChatUsers();
+    const user = currentUsers.find((u: any) => u.name === userName && u.pass === userPass);
     if (user) {
       setIsLoggedIn(true);
     } else {
@@ -81,7 +86,7 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
     }
   };
 
-  const createTopic = () => {
+  const createTopic = async () => {
     if (!newTopicTitle) return;
     const topic: ChatTopic = {
       id: Date.now().toString(),
@@ -90,15 +95,16 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
       timestamp: Date.now(),
       messages: []
     };
-    const newTopics = [topic, ...topics];
-    saveChatTopics(newTopics);
+    const currentTopics = await getChatTopics();
+    const newTopics = [topic, ...currentTopics];
+    await saveChatTopics(newTopics);
     onUpdateTopics(newTopics);
     setNewTopicTitle('');
     setShowNewTopicModal(false);
     setActiveTopic(topic);
   };
 
-  const addMessage = () => {
+  const addMessage = async () => {
     if (!newMessageText || !activeTopic) return;
     const msg: ChatMessage = {
       id: Date.now().toString(),
@@ -107,12 +113,12 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
       timestamp: Date.now()
     };
     
-    const allTopics = getChatTopics();
-    const updated = allTopics.map(t => 
+    const allTopics = await getChatTopics();
+    const updated = allTopics.map((t: any) => 
       t.id === activeTopic.id ? { ...t, messages: [...t.messages, msg] } : t
     );
     
-    saveChatTopics(updated);
+    await saveChatTopics(updated);
     onUpdateTopics(updated);
     setActiveTopic(prev => prev ? { ...prev, messages: [...prev.messages, msg] } : null);
     setNewMessageText('');
@@ -188,7 +194,7 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
         <div className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-amber-400 animate-pulse' : 'bg-emerald-500'}`}></div>
         <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
           {isSyncing ? <RefreshCw className="w-2 h-2 animate-spin" /> : <Wifi className="w-2 h-2" />}
-          Live Update
+          Live Sync
         </span>
       </div>
 
@@ -228,7 +234,7 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
                 <p className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
                   נוצר על ידי {activeTopic.author} 
                   <span className="opacity-40">•</span>
-                  מעודכן בזמן אמת
+                  מסונכרן לכל המכשירים
                 </p>
               </div>
               <button onClick={() => setActiveTopic(null)} className="md:hidden p-2 text-slate-400 hover:text-slate-600">
@@ -289,9 +295,9 @@ const ChatSystem: React.FC<ChatSystemProps> = ({ topics, onUpdateTopics }) => {
                 <MessageSquarePlus className="w-12 h-12" />
              </div>
              <div>
-                <h4 className="text-2xl font-black text-slate-800 tracking-tighter">ברוכים הבאים לצ'אט המסתנכרן</h4>
+                <h4 className="text-2xl font-black text-slate-800 tracking-tighter">צ'אט מסונכרן חוצה מכשירים</h4>
                 <p className="text-slate-400 font-bold mt-2 max-w-sm mx-auto">
-                  הודעות מתעדכנות באופן אוטומטי בין כל המכשירים. בחרו נושא או פתחו אחד חדש.
+                  הודעות נשמרות בענן ומופיעות באופן אוטומטי אצל כל המשתמשים. בחרו נושא או פתחו אחד חדש.
                 </p>
              </div>
              <button onClick={() => setShowNewTopicModal(true)} className="px-10 py-4 bg-indigo-600 text-white rounded-[2rem] font-black shadow-xl shadow-indigo-100 hover:scale-105 transition-all">
