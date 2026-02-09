@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Header from './components/Header';
 import PublicView from './components/PublicView';
 import AdminDashboard from './components/AdminDashboard';
@@ -9,7 +9,7 @@ import ChatSystem from './components/ChatSystem';
 import AdModal from './components/AdModal';
 import { CareEvent, AppSettings, ChatTopic } from './types';
 import { getEvents, saveEvents, getSettings, saveSettings, getChatTopics, saveChatTopics } from './services/storage';
-import { Wifi, RefreshCw } from 'lucide-react';
+import { Wifi, RefreshCw, Bell } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -22,8 +22,51 @@ const App: React.FC = () => {
   const [weekOffset, setWeekOffset] = useState(0);
   const [regParams, setRegParams] = useState<{date: string, slotId: string} | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
+  
+  const lastMsgCountRef = useRef<number>(0);
+  const originalTitle = useRef(document.title);
 
-  // טעינה ראשונית וסנכרון מחזורי
+  // בקשת אישור להתראות
+  useEffect(() => {
+    if ("Notification" in window) {
+      setNotificationPermission(Notification.permission);
+    }
+  }, []);
+
+  const requestPermission = () => {
+    if ("Notification" in window) {
+      Notification.requestPermission().then(permission => {
+        setNotificationPermission(permission);
+      });
+    }
+  };
+
+  // פונקציית השמעת צליל
+  const playNotificationSound = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+      oscillator.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.5);
+      
+      gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.5);
+    } catch (e) {
+      console.error("Audio failed", e);
+    }
+  };
+
+  // טעינה וסנכרון
   const syncData = useCallback(async () => {
     setIsSyncing(true);
     try {
@@ -35,20 +78,42 @@ const App: React.FC = () => {
       
       setEvents(remoteEvents);
       setSettings(remoteSettings);
+      
+      // בדיקה אם הגיעו הודעות חדשות עבור התראה
+      const currentMsgCount = remoteChat.reduce((acc, t) => acc + t.messages.length, 0);
+      if (lastMsgCountRef.current !== 0 && currentMsgCount > lastMsgCountRef.current) {
+        if (!showChat || document.hidden) {
+          playNotificationSound();
+          if (Notification.permission === 'granted') {
+            new Notification("הודעה חדשה בצ'אט רוחי", {
+              body: "יש עדכונים חדשים בקהילה",
+              icon: "/favicon.ico"
+            });
+          }
+          document.title = `* הודעה חדשה! * ${originalTitle.current}`;
+        }
+      }
+      lastMsgCountRef.current = currentMsgCount;
       setChatTopics(remoteChat);
     } catch (e) {
-      console.error("Sync loop error:", e);
+      console.error("Sync error:", e);
     } finally {
       setIsSyncing(false);
     }
-  }, []);
+  }, [showChat]);
 
   useEffect(() => {
     syncData();
-    // סנכרון כל 5 שניות
-    const interval = setInterval(syncData, 5000);
+    const interval = setInterval(syncData, 4000);
     return () => clearInterval(interval);
   }, [syncData]);
+
+  // איפוס הכותרת כשנכנסים לצ'אט
+  useEffect(() => {
+    if (showChat) {
+      document.title = originalTitle.current;
+    }
+  }, [showChat]);
 
   const handleUpdateEvents = useCallback(async (newEvents: CareEvent[]) => {
     setEvents(newEvents);
@@ -82,11 +147,22 @@ const App: React.FC = () => {
         isChatOpen={showChat}
       />
 
-      {/* Cloud Sync Status Toast */}
-      <div className={`fixed bottom-6 left-6 z-[100] transition-all duration-500 ${isSyncing ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-        <div className="bg-white/90 backdrop-blur-md border border-slate-100 px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
-          <Wifi className="w-3 h-3 text-emerald-500 animate-pulse" />
-          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">סנכרון ענן פעיל</span>
+      {/* Cloud Sync Status and Notification Permission */}
+      <div className="fixed bottom-6 left-6 z-[100] flex flex-col gap-3 items-start">
+        {notificationPermission === 'default' && (
+          <button 
+            onClick={requestPermission}
+            className="bg-indigo-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-[10px] font-black animate-bounce"
+          >
+            <Bell className="w-3 h-3" />
+            אפשר התראות
+          </button>
+        )}
+        <div className={`transition-all duration-500 ${isSyncing ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
+          <div className="bg-white/90 backdrop-blur-md border border-slate-100 px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
+            <Wifi className="w-3 h-3 text-emerald-500 animate-pulse" />
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">סנכרון ענן פעיל</span>
+          </div>
         </div>
       </div>
 

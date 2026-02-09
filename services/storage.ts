@@ -1,20 +1,19 @@
 
 import { CareEvent, AppSettings, EventType, ChatTopic } from '../types';
 
-// Fix: Add and export ChatUser interface so it can be used in ChatSystem components
 export interface ChatUser {
   name: string;
   pass: string;
 }
 
-// מפתח ייחודי לאפליקציה של רוחי כדי שלא יתערבב עם נתונים אחרים
-const BUCKET_ID = 'ruhi_care_v2_global_sync';
+// מפתח ייחודי משופר לסנכרון גלובלי
+const BUCKET_ID = 'ruhi_care_v2_final_sync_stable';
 const BASE_URL = `https://kvdb.io/A4rY3qN6u1e5u7y9s9z2r/${BUCKET_ID}`;
 
 // פונקציות עזר לתקשורת עם הענן
 async function remoteGet<T>(key: string, defaultValue: T): Promise<T> {
   try {
-    const response = await fetch(`${BASE_URL}_${key}`);
+    const response = await fetch(`${BASE_URL}_${key}`, { cache: 'no-store' });
     if (!response.ok) return defaultValue;
     const text = await response.text();
     return text ? JSON.parse(text) : defaultValue;
@@ -29,8 +28,8 @@ async function remoteSave<T>(key: string, data: T): Promise<void> {
     await fetch(`${BASE_URL}_${key}`, {
       method: 'POST',
       body: JSON.stringify(data),
+      headers: { 'Content-Type': 'application/json' }
     });
-    // עדכון מקביל ב-LocalStorage לגיבוי ומהירות
     localStorage.setItem(`${BUCKET_ID}_${key}`, JSON.stringify(data));
   } catch (e) {
     console.error(`Error saving ${key} to cloud:`, e);

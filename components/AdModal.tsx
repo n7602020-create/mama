@@ -35,12 +35,12 @@ const AdModal: React.FC<AdModalProps> = ({ ads, onClose }) => {
                     <img src={ad.imageUrl} alt={ad.title} className="w-full h-full object-cover" />
                   </div>
                 )}
-                <div className="p-6 flex flex-col justify-center gap-2">
+                <div className="p-6 flex flex-col justify-center gap-2 text-right">
                   <h4 className="text-lg font-bold text-indigo-900">{ad.title}</h4>
                   <p className="text-xs text-slate-600 font-medium leading-relaxed">{ad.description}</p>
                   {ad.link && ad.link !== '#' && (
                     <a href={ad.link} target="_blank" rel="noopener noreferrer" className="text-xs font-black text-indigo-600 hover:underline mt-2">
-                      לפרטים נוספים >>
+                      לפרטים נוספים &raquo;
                     </a>
                   )}
                 </div>
